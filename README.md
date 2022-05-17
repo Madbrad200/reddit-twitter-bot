@@ -22,6 +22,15 @@ You will also need to create an app account on Twitter: [[instructions]](https:/
 .
 (note - by default your app will have Essential perms. With these perms, you must use the [client](https://docs.tweepy.org/en/stable/client.html) class within tweepy (TWITTER API V2 REFERENCE))
 
+And a Reddit account:
+
+1. Go to https://www.reddit.com/
+2. Click `Sign Up` (top right on desktop) and fill out the necessary items.
+3. Once logged in, you may wish to verify your email.
+4. Go to the apps page https://old.reddit.com/prefs/apps/
+5. Click `Create another app...` at the bottom. Fill out relevant details.
+6. Your app `client_id` is located under the app name, e.g "-x1_KIHUOOJmk". The secret is below this as well.
+
 ## Usage
 
 Once you edit the bot script to provide the necessary API keys and the subreddit you want to tweet from, you can run the bot on the command line:
