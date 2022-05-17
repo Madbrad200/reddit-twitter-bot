@@ -25,6 +25,7 @@ import sys
 import time
 import logging
 
+# create the log file in the same directory as .py script
 logger = logging.getLogger("tweepy")
 logger.setLevel(logging.DEBUG)
 handler = logging.FileHandler(filename="tweepy.log")
@@ -76,10 +77,13 @@ def tweet_creator(subreddit_info):
             # This stores a link to the reddit post itself
             # If you want to link to what the post is linking to instead, use
             # "submission.url"   instead of "submission.permalink"
-
+            # if you read through PRAW documentation, you should also find ways to filter out posts you don't want
+            # e.g posts by specific authors
+            # or whitelists posts  that match specific queries, etc
+            
             # creates dict like {'submission_title': {}}
             post_dict[f'"{submission.title}"'] = {}
-            #
+            
             post = post_dict[f'"{submission.title}"']
             # {'submission_title': {'link': 'the_url_of_the_post_here'}}
             post['link'] = f"https://reddit.com{submission.permalink}"
@@ -121,6 +125,7 @@ def strip_title(title, num_characters):
 def tweeter(post_dict, post_ids):
     ''' Tweets all of the selected reddit posts. '''
     # twitter auth
+    # strongly recommend storing these keys in a .env file or some such
     api = tweepy.Client(bearer_token=BEARER_TOKEN_HERE,
                         consumer_key=CONSUMER_KEY_HERE,
                         consumer_secret=CONSUMER_SECRET_HERE,
@@ -132,13 +137,18 @@ def tweeter(post_dict, post_ids):
 
         # calculate the length of the tweet and strip the post title when necessary
         extra_text_len = 1 + T_CO_LINKS_LEN + len(TWEET_SUFFIX)
-
+        
+        # post_text is the actual contents of the tweet
+        # here it posts the title of the reddit post (Stripped if needed), then the url on a new line, then any suffix' you added
+        
         post_text = f"{strip_title(post, TWEET_MAX_LEN - extra_text_len)}\n{post_dict[post]['link']}\n{TWEET_SUFFIX}"
 
         print('[bot] Posting this link on Twitter')
         print(post_text)
+        # tweeting
         api.create_tweet(text=post_text)
         log_tweet(post_id)
+        # delaying to avoid hitting a rate limit
         time.sleep(DELAY_BETWEEN_TWEETS)
 
 # appends reddit post ID to text file
