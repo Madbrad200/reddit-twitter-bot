@@ -19,34 +19,30 @@ If not, see http://www.gnu.org/licenses/.
 '''
 
 import praw
-import json
-import requests
 import tweepy
-import time
 import os
-import urllib.parse
-from glob import glob
+import sys
+import time
+import logging
 
-# Place your Twitter API keys here
-ACCESS_TOKEN = ''
-ACCESS_TOKEN_SECRET = ''
-CONSUMER_KEY = ''
-CONSUMER_SECRET = ''
+logger = logging.getLogger("tweepy")
+logger.setLevel(logging.DEBUG)
+handler = logging.FileHandler(filename="tweepy.log")
+logger.addHandler(handler)
 
-# Place the subreddit you want to look up posts from here
-SUBREDDIT_TO_MONITOR = ''
-
-# Place the name of the folder where the images are downloaded
-IMAGE_DIR = 'img'
-
+# path of text file that'll document posts that've already been tweeted
+# create the file manually, can name it whatever you want
+# place in same file as .py file
+PATH = os.path.join(sys.path[0], "posted_cache.txt")
 # Place the name of the file to store the IDs of posts that have been posted
-POSTED_CACHE = 'posted_posts.txt'
+POSTED_CACHE = 'posted_cache.txt'
 
 # Place the string you want to add at the end of your tweets (can be empty)
-TWEET_SUFFIX = ' #dataviz'
+# e.g a hashtag
+TWEET_SUFFIX = ''
 
 # Place the maximum length for a tweet
-TWEET_MAX_LEN = 140
+TWEET_MAX_LEN = 280
 
 # Place the time you want to wait between each tweets (in seconds)
 DELAY_BETWEEN_TWEETS = 30
@@ -54,11 +50,16 @@ DELAY_BETWEEN_TWEETS = 30
 # Place the lengths of t.co links (cf https://dev.twitter.com/overview/t.co)
 T_CO_LINKS_LEN = 24
 
+
 def setup_connection_reddit(subreddit):
     ''' Creates a connection to the reddit API. '''
     print('[bot] Setting up connection with reddit')
-    reddit_api = praw.Reddit('reddit Twitter tool monitoring {}'.format(subreddit))
-    return reddit_api.get_subreddit(subreddit)
+    # read-only reddit auth
+    reddit_api = praw.Reddit(
+                        user_agent='reddit Twitter tool monitoring ',
+                        client_id=CLIENT_ID_GOES_HERE,
+                        client_secret=CLIENT_SECRET_GOES_HERE)
+    return reddit_api.subreddit(subreddit)
 
 
 def tweet_creator(subreddit_info):
@@ -68,25 +69,22 @@ def tweet_creator(subreddit_info):
 
     print('[bot] Getting posts from reddit')
 
-    # You can use the following "get" functions to get posts from reddit:
-    #   - get_top(): gets the most-upvoted posts (ignoring post age)
-    #   - get_hot(): gets the most-upvoted posts (taking post age into account)
-    #   - get_new(): gets the newest posts
-    #
     # "limit" tells the API the maximum number of posts to look up
 
-    for submission in subreddit_info.get_hot(limit=5):
+    for submission in subreddit_info.new(limit=10):
         if not already_tweeted(submission.id):
             # This stores a link to the reddit post itself
             # If you want to link to what the post is linking to instead, use
-            # "submission.url" instead of "submission.permalink"
-            post_dict[submission.title] = {}
-            post = post_dict[submission.title]
-            post['link'] = submission.permalink
+            # "submission.url"   instead of "submission.permalink"
+
+            # creates dict like {'submission_title': {}}
+            post_dict[f'"{submission.title}"'] = {}
+            #
+            post = post_dict[f'"{submission.title}"']
+            # {'submission_title': {'link': 'the_url_of_the_post_here'}}
+            post['link'] = f"https://reddit.com{submission.permalink}"
 
             # Store the url the post points to (if any)
-            # If it's an imgur URL, it will later be downloaded and uploaded alongside the tweet
-            post['img_path'] = get_image(submission.url)
 
             post_ids.append(submission.id)
         else:
@@ -107,7 +105,7 @@ def already_tweeted(post_id):
 
 
 def strip_title(title, num_characters):
-    ''' Shortens the title of the post to the 140 character limit. '''
+    ''' Shortens the title of the post to the 280 character limit. '''
 
     # How much you strip from the title depends on how much extra text
     # (URLs, hashtags, etc.) that you add to the tweet
@@ -120,73 +118,50 @@ def strip_title(title, num_characters):
         return title[:num_characters - 1] + '…'
 
 
-def get_image(img_url):
-    ''' Downloads i.imgur.com images that reddit posts may point to. '''
-    if 'imgur.com' in img_url:
-        file_name = os.path.basename(urllib.parse.urlsplit(img_url).path)
-        img_path = IMAGE_DIR + '/' + file_name
-        print('[bot] Downloading image at URL ' + img_url + ' to ' + img_path)
-        resp = requests.get(img_url, stream=True)
-        if resp.status_code == 200:
-            with open(img_path, 'wb') as image_file:
-                for chunk in resp:
-                    image_file.write(chunk)
-            # Return the path of the image, which is always the same since we just overwrite images
-            return img_path
-        else:
-            print('[bot] Image failed to download. Status code: ' + resp.status_code)
-    else:
-        print('[bot] Post doesn\'t point to an i.imgur.com link')
-    return ''
-
-
 def tweeter(post_dict, post_ids):
     ''' Tweets all of the selected reddit posts. '''
-    auth = tweepy.OAuthHandler(CONSUMER_KEY, CONSUMER_SECRET)
-    auth.set_access_token(ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
-    api = tweepy.API(auth)
+    # twitter auth
+    api = tweepy.Client(bearer_token=BEARER_TOKEN_HERE,
+                        consumer_key=CONSUMER_KEY_HERE,
+                        consumer_secret=CONSUMER_SECRET_HERE,
+                        access_token=ACCESS_TOKEN_HERE,
+                        access_token_secret=ACCESS_TOKEN_SECRET_HERE,
+                        wait_on_rate_limit=True)
 
     for post, post_id in zip(post_dict, post_ids):
-        img_path = post_dict[post]['img_path']
 
-        extra_text = ' ' + post_dict[post]['link'] + TWEET_SUFFIX
+        # calculate the length of the tweet and strip the post title when necessary
         extra_text_len = 1 + T_CO_LINKS_LEN + len(TWEET_SUFFIX)
-        if img_path:  # Image counts as a link
-            extra_text_len += T_CO_LINKS_LEN
-        post_text = strip_title(post, TWEET_MAX_LEN - extra_text_len) + extra_text
+
+        post_text = f"{strip_title(post, TWEET_MAX_LEN - extra_text_len)}\n{post_dict[post]['link']}\n{TWEET_SUFFIX}"
+
         print('[bot] Posting this link on Twitter')
         print(post_text)
-        if img_path:
-            print('[bot] With image ' + img_path)
-            api.update_with_media(filename=img_path, status=post_text)
-        else:
-            api.update_status(status=post_text)
+        api.create_tweet(text=post_text)
         log_tweet(post_id)
         time.sleep(DELAY_BETWEEN_TWEETS)
 
-
+# appends reddit post ID to text file
 def log_tweet(post_id):
-    ''' Takes note of when the reddit Twitter bot tweeted a post. '''
-    with open(POSTED_CACHE, 'a') as out_file:
-        out_file.write(str(post_id) + '\n')
+    # opens file in append mode
+    with open(PATH, 'a') as posted_cache:
+        # writes the post id to text file then adds a new line
+        posted_cache.write(str(post_id) + '\n')
 
 
 def main():
     ''' Runs through the bot posting routine once. '''
-    # If the tweet tracking file does not already exist, create it
-    if not os.path.exists(POSTED_CACHE):
-        with open(POSTED_CACHE, 'w'):
-            pass
-    if not os.path.exists(IMAGE_DIR):
-        os.makedirs(IMAGE_DIR)
 
-    subreddit = setup_connection_reddit(SUBREDDIT_TO_MONITOR)
-    post_dict, post_ids = tweet_creator(subreddit)
-    tweeter(post_dict, post_ids)
+    # run script continously 
+    while True:
+        def reddit_to_twitter():
+            subreddit = setup_connection_reddit('ENTER_SUBREDDIT_NAME_HERE')
+            post_dict, post_ids = tweet_creator(subreddit)
+            tweeter(post_dict, post_ids)
+        reddit_to_twitter()
+        print("waiting 3600 seconds (1 hour)....")
+        time.sleep(3600)
 
-    # Clean out the image cache
-    for filename in glob(IMAGE_DIR + '/*'):
-        os.remove(filename)
 
 if __name__ == '__main__':
     main()
