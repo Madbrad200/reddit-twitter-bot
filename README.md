@@ -2,7 +2,15 @@
 
 A Python bot that looks up new posts from a subreddit and automatically posts them on Twitter.
 
-With an understanding of Python, and some brief understanding of [PRAW](https://praw.readthedocs.io/) and [tweepy](https://docs.tweepy.org/en/stable/client.html), you should be able to edit it with ease.
+With an understanding of Python, and some brief understanding of [PRAW](https://praw.readthedocs.io/) and [tweepy](https://docs.tweepy.org/en/stable/client.html), you should be able to edit it with ease. By default:
+
+* The script is ran every hour (3600 seconds), assuming it is still online.
+* It cannot be ran as-is - you need to edit in the subreddit you wish to follow, and the Twitter/Reddit ID's/secrets.
+* You'll need to create a txt file for caching results (name it `posted_cache.txt` - make sure you edit the code if you name it something different).
+* Default delay between tweets is 30 seconds.
+* By default, the script looks up the last 10 NEW posts. It the checks if it's tweeted them already or not - if not, it'll tweet them.
+
+All this can be edited if you wish.
 
 ## Disclaimer
 
